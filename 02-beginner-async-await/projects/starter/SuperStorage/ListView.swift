@@ -45,6 +45,7 @@ struct ListView: View {
       isDisplayingDownload = true
     }
   }
+
   @State var isDisplayingDownload = false
 
   /// The latest error message.
@@ -53,6 +54,7 @@ struct ListView: View {
       isDisplayingError = true
     }
   }
+
   @State var isDisplayingError = false
 
   var body: some View {
@@ -89,10 +91,27 @@ struct ListView: View {
         .animation(.easeOut(duration: 0.33), value: files)
       }
       .alert("Error", isPresented: $isDisplayingError, actions: {
-        Button("Close", role: .cancel) { }
+        Button("Close", role: .cancel) {}
       }, message: {
         Text(lastErrorMessage)
       })
+      .task {
+        guard files.isEmpty else {
+          return
+        }
+
+        do {
+          async let files = try await model.availableFiles()
+          async let status = try await model.status()
+
+          let (filesResult, statusResult) = try await (files, status)
+
+          self.files = filesResult
+          self.status = statusResult
+        } catch {
+          lastErrorMessage = error.localizedDescription
+        }
+      }
     }
   }
 }

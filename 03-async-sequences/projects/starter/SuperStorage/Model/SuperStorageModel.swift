@@ -64,7 +64,12 @@ class SuperStorageModel: ObservableObject {
   }
 
   /// Downloads a file, returns its data, and updates the download progress in ``downloads``.
-  private func downloadWithProgress(fileName: String, name: String, size: Int, offset: Int? = nil) async throws -> Data {
+  private func downloadWithProgress(
+    fileName: String,
+    name: String,
+    size: Int,
+    offset: Int? = nil) async throws -> Data
+  {
     guard let url = URL(string: "http://localhost:8080/files/download?\(fileName)") else {
       throw "Could not create the URL."
     }
@@ -106,6 +111,12 @@ class SuperStorageModel: ObservableObject {
       }
       print(accumulator.description)
     }
+
+    if stopDownloads, !Self.supportsPartialDownloads {
+      throw CancellationError()
+    }
+
+    print("Accumulator data: \(accumulator.data) for JPEG")
     return accumulator.data
   }
 

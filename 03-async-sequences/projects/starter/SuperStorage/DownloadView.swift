@@ -30,6 +30,7 @@
 /// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 /// THE SOFTWARE.
 
+import Combine
 import SwiftUI
 import UIKit
 
@@ -43,7 +44,33 @@ struct DownloadView: View {
   /// Should display a download activity indicator.
   @State var isDownloadActive = false
   @State var duration = ""
-  @State var downloadTask: Task<Void, Error>?
+  @State var downloadTask: Task<Void, Error>? {
+    didSet {
+      timerTask?.cancel()
+
+      guard isDownloadActive else {
+        return
+      }
+
+      let startTime = Date().timeIntervalSince1970
+      let timerSequence = Timer
+        .publish(every: 1, tolerance: 1, on: .main, in: .common)
+        .autoconnect()
+        .map { date -> String in
+          let duration = Int(date.timeIntervalSince1970 - startTime)
+          return "\(duration)"
+        }
+        .values
+
+      timerTask = Task {
+        for await duration in timerSequence {
+          self.duration = duration
+        }
+      }
+    }
+  }
+
+  @State var timerTask: Task<Void, Error>?
 
   var body: some View {
     List {
@@ -60,15 +87,21 @@ struct DownloadView: View {
               fileData = try await model.download(file: file)
             } catch {}
             isDownloadActive = false
+            timerTask?.cancel()
           }
         },
         downloadWithUpdatesAction: {
           isDownloadActive = true
           downloadTask = Task {
             do {
-              fileData = try await model.downloadWithProgress(file: file)
+              try await SuperStorageModel
+                .$supportsPartialDownloads
+                .withValue(file.name.hasSuffix(".jpeg")) {
+                  fileData = try await model.downloadWithProgress(file: file)
+                }
             } catch {}
             isDownloadActive = false
+            timerTask?.cancel()
           }
         },
         downloadMultipleAction: {
@@ -93,7 +126,9 @@ struct DownloadView: View {
     .animation(.easeOut(duration: 0.33), value: model.downloads)
     .listStyle(InsetGroupedListStyle())
     .toolbar(content: {
-      Button(action: {}, label: { Text("Cancel All") })
+      Button(action: {
+        model.stopDownloads = true
+      }, label: { Text("Cancel All") })
         .disabled(model.downloads.isEmpty)
     })
     .onDisappear {

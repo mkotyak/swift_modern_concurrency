@@ -87,7 +87,6 @@ struct DownloadView: View {
               fileData = try await model.download(file: file)
             } catch {}
             isDownloadActive = false
-            timerTask?.cancel()
           }
         },
         downloadWithUpdatesAction: {
@@ -105,7 +104,13 @@ struct DownloadView: View {
           }
         },
         downloadMultipleAction: {
-          // Download a file in multiple concurrent parts.
+          isDownloadActive = true
+          Task {
+            do {
+              fileData = try await model.multiDownloadWithProgress(file: file)
+            } catch {}
+            isDownloadActive = false
+          }
         }
       )
       if !model.downloads.isEmpty {

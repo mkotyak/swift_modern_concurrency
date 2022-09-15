@@ -36,6 +36,7 @@ import Foundation
 class SuperStorageModel: ObservableObject {
   /// The list of currently running downloads.
   @Published var downloads: [DownloadInfo] = []
+  @TaskLocal static var supportsPartialDownloads = false
 
   /// Downloads a file and returns its content.
   func download(file: DownloadFile) async throws -> Data {
@@ -68,7 +69,44 @@ class SuperStorageModel: ObservableObject {
       throw "Could not create the URL."
     }
     await addDownload(name: name)
-    return Data()
+
+    let result: (downloadStream: URLSession.AsyncBytes, response: URLResponse)
+
+    if let offset = offset {
+      let urlRequest = URLRequest(url: url, offset: offset, length: size)
+
+      result = try await URLSession.shared.bytes(for: urlRequest, delegate: nil)
+
+      guard (result.response as? HTTPURLResponse)?.statusCode == 206 else {
+        throw "The server responded with an error."
+      }
+    } else {
+      result = try await URLSession.shared.bytes(from: url, delegate: nil)
+
+      guard (result.response as? HTTPURLResponse)?.statusCode == 200 else {
+        throw "The server responded with an error."
+      }
+    }
+
+    var asyncDownloadIterator = result.downloadStream.makeAsyncIterator()
+
+    let accumulator = ByteAccumulator(name: name, size: size)
+
+    while !stopDownloads,
+          !accumulator.checkCompleted()
+    {
+      while !accumulator.isBatchCompleted,
+            let byte = try await asyncDownloadIterator.next()
+      {
+        accumulator.append(byte)
+      }
+
+      Task.detached(priority: .medium) { [weak self] in
+        await self?.updateDownload(name: name, progress: accumulator.progress)
+      }
+      print(accumulator.description)
+    }
+    return accumulator.data
   }
 
   /// Downloads a file using multiple concurrent connections, returns the final content, and updates the download progress.
@@ -81,7 +119,7 @@ class SuperStorageModel: ObservableObject {
       return (offset: partOffset, size: partSize, name: partName)
     }
     let total = 4
-    let parts = (0..<total).map { partInfo(index: $0, of: total) }
+    let parts = (0 ..< total).map { partInfo(index: $0, of: total) }
     // Add challenge code here.
     return Data()
   }
@@ -100,16 +138,17 @@ class SuperStorageModel: ObservableObject {
     }
 
     let (data, response) = try await
-    URLSession.shared.data(from: url)
+      URLSession.shared.data(from: url)
 
     guard (response as? HTTPURLResponse)?.statusCode == 200 else {
       throw "The server responded with an error."
     }
 
     guard let list = try? JSONDecoder()
-            .decode([DownloadFile].self, from: data) else {
-              throw "The server response was not recognized."
-            }
+      .decode([DownloadFile].self, from: data)
+    else {
+      throw "The server response was not recognized."
+    }
 
     return list
   }
@@ -136,7 +175,7 @@ extension SuperStorageModel {
     let downloadInfo = DownloadInfo(id: UUID(), name: name, progress: 0.0)
     downloads.append(downloadInfo)
   }
-  
+
   /// Updates a the progress of a given download.
   @MainActor func updateDownload(name: String, progress: Double) {
     if let index = downloads.firstIndex(where: { $0.name == name }) {

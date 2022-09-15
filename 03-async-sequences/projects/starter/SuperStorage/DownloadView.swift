@@ -43,6 +43,7 @@ struct DownloadView: View {
   /// Should display a download activity indicator.
   @State var isDownloadActive = false
   @State var duration = ""
+  @State var downloadTask: Task<Void, Error>?
 
   var body: some View {
     List {
@@ -57,12 +58,18 @@ struct DownloadView: View {
           Task {
             do {
               fileData = try await model.download(file: file)
-            } catch { }
+            } catch {}
             isDownloadActive = false
           }
         },
         downloadWithUpdatesAction: {
-          // Download a file with UI progress updates.
+          isDownloadActive = true
+          downloadTask = Task {
+            do {
+              fileData = try await model.downloadWithProgress(file: file)
+            } catch {}
+            isDownloadActive = false
+          }
         },
         downloadMultipleAction: {
           // Download a file in multiple concurrent parts.
@@ -86,13 +93,13 @@ struct DownloadView: View {
     .animation(.easeOut(duration: 0.33), value: model.downloads)
     .listStyle(InsetGroupedListStyle())
     .toolbar(content: {
-      Button(action: {
-      }, label: { Text("Cancel All") })
+      Button(action: {}, label: { Text("Cancel All") })
         .disabled(model.downloads.isEmpty)
     })
     .onDisappear {
       fileData = nil
       model.reset()
+      downloadTask?.cancel()
     }
   }
 }

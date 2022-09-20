@@ -51,9 +51,45 @@ class BlabberModel: ObservableObject {
   /// Does a countdown and sends the message.
   func countdown(to message: String) async throws {
     guard !message.isEmpty else { return }
-    
+
     let counter = AsyncStream<String> { continuation in
-      
+      var countdown = 3
+
+      Timer.scheduledTimer(
+        withTimeInterval: 1.0,
+        repeats: true
+      ) { timer in
+        guard countdown > 0 else {
+          timer.invalidate()
+          continuation.yield(with: .success("🎉 " + message))
+          return
+        }
+
+        continuation.yield("\(countdown) ...")
+        countdown -= 1
+      }
+    }
+
+    try await counter.forEach {
+      try await self.say($0)
+    }
+  }
+
+  func observeAppStatus() async {
+    Task {
+      for await _ in await NotificationCenter.default
+        .notifications(for: UIApplication.willResignActiveNotification)
+      {
+        try? await say("\(username) went away", isSystemMessage: true)
+      }
+    }
+
+    Task {
+      for await _ in await NotificationCenter.default
+        .notifications(for: UIApplication.didBecomeActiveNotification)
+      {
+        try? await say("\(username) came back", isSystemMessage: true)
+      }
     }
   }
 
@@ -102,6 +138,14 @@ class BlabberModel: ObservableObject {
       Message(message: "\(status.activeUsers) active users")
     )
 
+    let notification = Task {
+      await observeAppStatus()
+    }
+
+    defer {
+      notification.cancel()
+    }
+
     for try await line in stream.lines {
       if let data = line.data(using: .utf8),
          let update = try? JSONDecoder().decode(Message.self, from: data)
@@ -136,4 +180,12 @@ class BlabberModel: ObservableObject {
     configuration.timeoutIntervalForRequest = .infinity
     return URLSession(configuration: configuration)
   }()
+}
+
+extension AsyncSequence {
+  func forEach(_ body: (Element) async throws -> Void) async throws {
+    for try await element in self {
+      try await body(element)
+    }
+  }
 }

@@ -44,8 +44,8 @@ struct LoginView: View {
         .foregroundColor(Color.teal)
 
       HStack {
-        TextField(text: $username, prompt: Text("Username")) { }
-        .textFieldStyle(RoundedBorderTextFieldStyle())
+        TextField(text: $username, prompt: Text("Username")) {}
+          .textFieldStyle(RoundedBorderTextFieldStyle())
 
         Button(action: {
           model.username = username

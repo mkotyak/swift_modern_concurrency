@@ -49,24 +49,55 @@ class BlabberModel: ObservableObject {
   func shareLocation() async throws {}
 
   /// Does a countdown and sends the message.
+//  func countdown(to message: String) async throws {
+//    guard !message.isEmpty else { return }
+//
+//    let counter = AsyncStream<String> { continuation in
+//      var countdown = 3
+//
+//      Timer.scheduledTimer(
+//        withTimeInterval: 1.0,
+//        repeats: true
+//      ) { timer in
+//        guard countdown > 0 else {
+//          timer.invalidate()
+//          continuation.yield(with: .success("🎉 " + message))
+//          return
+//        }
+//
+//        continuation.yield("\(countdown) ...")
+//        countdown -= 1
+//      }
+//    }
+//
+//    try await counter.forEach {
+//      try await self.say($0)
+//    }
+//  }
+
+  // Challenge version of the "countdown" func
   func countdown(to message: String) async throws {
     guard !message.isEmpty else { return }
+    var countdown = 3
 
-    let counter = AsyncStream<String> { continuation in
-      var countdown = 3
+    let counter = AsyncStream<String> {
+      do {
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+      } catch {
+        return nil
+      }
 
-      Timer.scheduledTimer(
-        withTimeInterval: 1.0,
-        repeats: true
-      ) { timer in
-        guard countdown > 0 else {
-          timer.invalidate()
-          continuation.yield(with: .success("🎉 " + message))
-          return
-        }
-
-        continuation.yield("\(countdown) ...")
+      defer {
         countdown -= 1
+      }
+
+      switch countdown {
+      case 1...:
+        return "\(countdown)..."
+      case 0:
+        return "🎉 " + message
+      default:
+        return nil
       }
     }
 

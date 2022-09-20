@@ -47,6 +47,7 @@ struct ChatView: View {
       isDisplayingError = true
     }
   }
+
   @State var isDisplayingError = false
 
   @Environment(\.presentationMode) var presentationMode
